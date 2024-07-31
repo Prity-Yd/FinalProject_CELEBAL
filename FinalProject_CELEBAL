@@ -1,0 +1,101 @@
+-- Customer Table
+CREATE TABLE Customer (
+    CustomerID INT PRIMARY KEY,
+    Name NVARCHAR(100),
+    Address NVARCHAR(255),
+    Email NVARCHAR(100),
+    PhoneNumber NVARCHAR(15)
+);
+
+-- Product Table
+CREATE TABLE Product (
+    ProductID INT PRIMARY KEY,
+    Name NVARCHAR(100),
+    Description NVARCHAR(255),
+    Price DECIMAL(10, 2),
+    Category NVARCHAR(100)
+);
+
+-- Order Table
+CREATE TABLE [Order] (
+    OrderID INT PRIMARY KEY,
+    CustomerID INT FOREIGN KEY REFERENCES Customer(CustomerID),
+    ProductID INT FOREIGN KEY REFERENCES Product(ProductID),
+    Quantity INT,
+    OrderDate DATETIME,
+    TotalAmount DECIMAL(10, 2)
+);
+
+-- Inventory Table
+CREATE TABLE Inventory (
+    ProductID INT PRIMARY KEY FOREIGN KEY REFERENCES Product(ProductID),
+    Quantity INT,
+    Location NVARCHAR(100)
+);
+
+
+
+EXEC sys.sp_cdc_enable_db;
+
+EXEC sys.sp_cdc_enable_table
+    @source_schema = N'dbo',
+    @source_name = N'Customer',
+    @role_name = NULL;
+
+EXEC sys.sp_cdc_enable_table
+    @source_schema = N'dbo',
+    @source_name = N'Product',
+    @role_name = NULL;
+
+EXEC sys.sp_cdc_enable_table
+    @source_schema = N'dbo',
+    @source_name = N'Order',
+    @role_name = NULL;
+
+EXEC sys.sp_cdc_enable_table
+    @source_schema = N'dbo',
+    @source_name = N'Inventory',
+    @role_name = NULL;
+
+
+
+
+
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+# Initialize Spark session
+spark = SparkSession.builder \
+    .appName("CDC_Pipeline") \
+    .getOrCreate()
+
+# Define JDBC connection properties
+jdbc_url = "jdbc:sqlserver://<SQL_SERVER_ADDRESS>;databaseName=<DATABASE_NAME>"
+connection_properties = {
+    "user": "<USERNAME>",
+    "password": "<PASSWORD>",
+    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+}
+
+# Read tables from SQL Server
+customer_df = spark.read.jdbc(jdbc_url, "Customer", properties=connection_properties)
+product_df = spark.read.jdbc(jdbc_url, "Product", properties=connection_properties)
+order_df = spark.read.jdbc(jdbc_url, "[Order]", properties=connection_properties)
+inventory_df = spark.read.jdbc(jdbc_url, "Inventory", properties=connection_properties)
+
+# Perform CDC logic (example: detecting changes using timestamp columns or version numbers)
+
+# For illustration, let's assume we have a timestamp column 'LastModified'
+# customer_df = customer_df.filter("LastModified > <LAST_CDC_TIMESTAMP>")
+
+# Write the changed data to a Delta table (Databricks)
+customer_df.write.format("delta").mode("overwrite").save("/mnt/delta/customer")
+product_df.write.format("delta").mode("overwrite").save("/mnt/delta/product")
+order_df.write.format("delta").mode("overwrite").save("/mnt/delta/order")
+inventory_df.write.format("delta").mode("overwrite").save("/mnt/delta/inventory")
+
+
+
+
+
